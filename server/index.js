@@ -417,6 +417,8 @@ app.get(
 
 const dist = fileURLToPath(new URL("../dist", import.meta.url));
 if (existsSync(dist)) {
+  app.get("/terms", (req, res) => res.sendFile("terms.html", { root: dist }));
+  app.get("/privacy", (req, res) => res.sendFile("privacy.html", { root: dist }));
   app.use(express.static(dist, { index: "index.html" }));
   app.get("/{*splat}", (req, res, next) => {
     if (req.path.startsWith("/api/")) return next();
