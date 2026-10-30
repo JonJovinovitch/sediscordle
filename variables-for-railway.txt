@@ -1,0 +1,14 @@
+# These go in Railway -> your game service -> Variables (not in GitHub!)
+
+# From the Discord Developer Portal -> your app -> OAuth2
+DISCORD_CLIENT_ID=paste_client_id_here
+DISCORD_CLIENT_SECRET=paste_client_secret_here
+
+# On Railway, type exactly this so it links to your Postgres database:
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+
+# Optional: when the new puzzle starts (midnight in this time zone). Default is US Eastern.
+# PUZZLE_TIMEZONE=America/New_York
+
+# Optional, for testing in a normal web browser without Discord. Leave off for real use.
+# ALLOW_DEV_LOGIN=true
