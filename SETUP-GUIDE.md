@@ -143,14 +143,17 @@ Go back to **discord.com/developers/applications** and click your **SeDiscordle*
 6. Start typing words! 🟩🟨
 
 **How the game works:**
-- You've got **16 boards** and **21 guesses**. Every guess goes on all 16 boards.
+- You've got **16 boards** and **no guess limit**. Every guess goes on all 16 boards. Keep going until all 16 are solved.
+- **Scoring:** fewer guesses is better. If two people tie, the faster time wins.
 - Everybody gets the **same 16 words** each day. A new puzzle drops at **midnight Eastern time**.
 - Your **clock starts on your first guess**.
-- 🔥 **Hard mode:** before your first guess, hit the orange **Hard mode** button. You get **60 seconds per guess**. If the clock runs out, you lose that guess and the next 60 seconds start. You have to pick it before your first guess, and hard-mode runs get a **HARD** tag on the leaderboard.
+- 🔥 **Hard mode:** before your first guess, hit the orange **Hard mode** button. You get **60 seconds per guess**. If the clock runs out, a wasted guess gets added to your count and the next 60 seconds start. Hard-mode runs get a **HARD** tag on the leaderboard.
+- 🔀 **Shuffle** moves the boards around on your screen. 🔊 turns the solve sound on or off.
 - Hit 🏆 **Leaderboard** to see your server's:
+  - **Today:** everyone who finished today
+  - **All-Time Best:** everyone's best game ever, and the date
   - **Win Streaks:** most days in a row winning
-  - **Fastest Ever:** quickest win, and the date it happened
-  - **Today:** how everybody did today
+  - On Today and All-Time Best, pick **Overall** (guesses, then time), **Fewest Guesses**, or **Fastest**.
 
 ---
 

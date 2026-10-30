@@ -4,6 +4,7 @@ import { formatTime, letterStates } from "./util.js";
 import Board from "./Board.jsx";
 import Keyboard from "./Keyboard.jsx";
 import Leaderboard from "./Leaderboard.jsx";
+import { isMuted, setMuted, playSolved, playWin, unlockAudio } from "./sound.js";
 
 export default function App() {
   const [phase, setPhase] = useState("loading"); // loading | devlogin | ready | error
@@ -97,6 +98,9 @@ function Game({ initial }) {
   const [showEnd, setShowEnd] = useState(initial.game.status !== "playing");
   const [now, setNow] = useState(Date.now());
   const toastTimer = useRef();
+  const [celebrating, setCelebrating] = useState(() => new Set());
+  const [muted, setMutedState] = useState(isMuted());
+  const [order, setOrder] = useState(() => loadOrder(initial.game.day, initial.game.boardCount));
 
   // Line our clock up with the server's so the timer is right.
   const offset = useRef(Date.parse(initial.game.serverNow) - Date.now());
@@ -127,8 +131,7 @@ function Game({ initial }) {
         offset.current = Date.parse(res.game.serverNow) - Date.now();
         setGame(res.game);
         setStats(res.stats);
-        if (res.game.status !== "playing") setTimeout(() => setShowEnd(true), 600);
-        else flash("Time's up! That guess is gone.");
+        flash("Time's up! +1 guess.");
       })
       .catch(() => {})
       .finally(() => (refreshing.current = false));
@@ -156,6 +159,39 @@ function Game({ initial }) {
       ? now + offset.current - Date.parse(game.startedAt)
       : 0;
 
+  // Pop, confetti and a squeal for every board that just got solved.
+  const celebrate = (before, after) => {
+    const fresh = after.boards.map((b, i) => (b.solved && !before.boards[i].solved ? i : -1)).filter((i) => i >= 0);
+    if (!fresh.length) return;
+    const total = after.boards.filter((b) => b.solved).length;
+    if (after.status === "won") playWin();
+    else playSolved(total);
+    setCelebrating((prev) => new Set([...prev, ...fresh]));
+    setTimeout(
+      () => setCelebrating((prev) => new Set([...prev].filter((i) => !fresh.includes(i)))),
+      1500
+    );
+  };
+
+  const shuffle = () => {
+    const next = [...order];
+    for (let i = next.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [next[i], next[j]] = [next[j], next[i]];
+    }
+    setOrder(next);
+    saveOrder(game.day, next);
+  };
+
+  const toggleSound = () => {
+    setMuted(!muted);
+    setMutedState(!muted);
+    if (muted) {
+      unlockAudio();
+      playSolved(1);
+    }
+  };
+
   const flash = (msg) => {
     setToast(msg);
     clearTimeout(toastTimer.current);
@@ -173,10 +209,11 @@ function Game({ initial }) {
     try {
       const res = await sendGuess(typing, game.day);
       offset.current = Date.parse(res.game.serverNow) - Date.now();
+      celebrate(game, res.game);
       setGame(res.game);
       setStats(res.stats);
       setTyping("");
-      if (res.game.status !== "playing") setTimeout(() => setShowEnd(true), 600);
+      if (res.game.status !== "playing") setTimeout(() => setShowEnd(true), 1400);
     } catch (e) {
       if (e.code === "not_a_word") {
         setShake(true);
@@ -190,11 +227,12 @@ function Game({ initial }) {
     } finally {
       setBusy(false);
     }
-  }, [busy, playing, typing, game.day]);
+  }, [busy, playing, typing, game]);
 
   const onKey = useCallback(
     (k) => {
       if (!playing) return;
+      unlockAudio();
       if (k === "enter") return submit();
       if (k === "back") return setTyping((t) => t.slice(0, -1));
       if (/^[a-z]$/.test(k)) setTyping((t) => (t.length < 5 ? t + k : t));
@@ -230,7 +268,7 @@ function Game({ initial }) {
           </div>
         </div>
         <div className="meters">
-          <Meter label="Guesses" value={`${game.guesses.length}/${game.maxGuesses}`} warn={game.maxGuesses - game.guesses.length <= 3 && playing} />
+          <Meter label="Guesses" value={game.guesses.length} />
           <Meter label="Solved" value={`${solvedCount}/${game.boardCount}`} />
           <Meter label="Time" value={formatTime(elapsed)} mono />
           {remaining != null ? (
@@ -239,17 +277,26 @@ function Game({ initial }) {
             <Meter label="Streak" value={`🔥 ${stats.currentStreak}`} />
           )}
         </div>
-        <button className="btn ghost" onClick={() => setShowBoard(true)}>
-          🏆 <span className="hide-sm">Leaderboard</span>
-        </button>
+        <div className="actions">
+          <button className="icon-btn" onClick={shuffle} title="Shuffle the boards around" aria-label="Shuffle boards">
+            🔀
+          </button>
+          <button className="icon-btn" onClick={toggleSound} title={muted ? "Turn sound on" : "Turn sound off"} aria-label={muted ? "Turn sound on" : "Turn sound off"}>
+            {muted ? "🔇" : "🔊"}
+          </button>
+          <button className="btn ghost" onClick={() => setShowBoard(true)}>
+            🏆 <span className="hide-sm">Leaderboard</span>
+          </button>
+        </div>
       </header>
 
       <main className="boards">
-        {game.boards.map((b, i) => (
+        {order.map((i) => (
           <Board
             key={i}
             index={i}
-            board={b}
+            board={game.boards[i]}
+            celebrate={celebrating.has(i)}
             guesses={game.guesses}
             typing={typing}
             playing={playing}
@@ -277,7 +324,7 @@ function Game({ initial }) {
         <Keyboard letterStates={states} solved={solvedFlags} onKey={onKey} />
       ) : (
         <div className="done-bar">
-          <span>{game.status === "won" ? `All 16 in ${formatTime(game.durationMs)}!` : `${solvedCount}/16 solved.`} New puzzle at midnight.</span>
+          <span>All 16 in {game.guesses.length} guesses and {formatTime(game.durationMs)}! New puzzle at midnight.</span>
           <button className="btn" onClick={() => setShowEnd(true)}>Results</button>
         </div>
       )}
@@ -287,7 +334,6 @@ function Game({ initial }) {
         <EndScreen
           game={game}
           stats={stats}
-          solvedCount={solvedCount}
           onClose={() => setShowEnd(false)}
           onLeaderboard={() => {
             setShowEnd(false);
@@ -309,8 +355,7 @@ function Meter({ label, value, mono, warn }) {
   );
 }
 
-function EndScreen({ game, stats, solvedCount, onClose, onLeaderboard }) {
-  const won = game.status === "won";
+function EndScreen({ game, stats, onClose, onLeaderboard }) {
   return (
     <div className="overlay" onClick={onClose}>
       <div className="panel end" onClick={(e) => e.stopPropagation()}>
@@ -318,11 +363,11 @@ function EndScreen({ game, stats, solvedCount, onClose, onLeaderboard }) {
           ✕
         </button>
         <div className="eyebrow">SeDiscordle #{game.puzzleNumber}{game.hard ? " · Hard mode" : ""}</div>
-        <h2>{won ? "All 16. Nice." : solvedCount >= 12 ? "So close." : "Not today."}</h2>
+        <h2>All 16. Nice.</h2>
         <div className="end-stats">
           <div>
-            <b>{won ? formatTime(game.durationMs) : `${solvedCount}/16`}</b>
-            <span>{won ? "time" : "solved"}</span>
+            <b>{formatTime(game.durationMs)}</b>
+            <span>time</span>
           </div>
           <div>
             <b>{game.guesses.length}</b>
@@ -339,20 +384,34 @@ function EndScreen({ game, stats, solvedCount, onClose, onLeaderboard }) {
         </div>
         <div className="mini-grid">
           {game.boards.map((b, i) => (
-            <span key={i} className={b.solved ? "ok" : "miss"} title={b.answer}>
-              {b.solved ? b.solvedAt + 1 : "✕"}
+            <span key={i} className="ok" title={b.answer?.toUpperCase()}>
+              {b.solvedAt + 1}
             </span>
           ))}
         </div>
-        {!won && (
-          <p className="muted small">
-            Missed: {game.boards.filter((b) => !b.solved).map((b) => b.answer?.toUpperCase()).join(", ")}
-          </p>
-        )}
         <button className="btn full" onClick={onLeaderboard}>
           🏆 See the server leaderboard
         </button>
       </div>
     </div>
   );
+}
+
+// Board order is just for looks, remembered per day in this browser.
+function loadOrder(day, count) {
+  const base = Array.from({ length: count }, (_, i) => i);
+  try {
+    const saved = JSON.parse(localStorage.getItem("sediscordle-order") || "null");
+    if (saved?.day === day && saved.order?.length === count) return saved.order;
+  } catch {
+    /* storage blocked */
+  }
+  return base;
+}
+function saveOrder(day, order) {
+  try {
+    localStorage.setItem("sediscordle-order", JSON.stringify({ day, order }));
+  } catch {
+    /* storage blocked */
+  }
 }

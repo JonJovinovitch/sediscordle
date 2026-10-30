@@ -7,7 +7,6 @@ import { pool, migrate, getPuzzleSecret } from "./db.js";
 import {
   ALLOWED,
   BOARD_COUNT,
-  MAX_GUESSES,
   HARD_GUESS_MS,
   TIMEOUT,
   todayString,
@@ -166,7 +165,8 @@ const requireSession = wrap(async (req, res, next) => {
 
 // ---------- The game ----------
 
-const GRACE_MS = 2000; // a little slack for slow connections in hard mode
+const GRACE_MS = 2000;
+const MAX_TIMEOUTS_PER_GAP = 100; // a little slack for slow connections in hard mode
 
 async function getStats(userId, day) {
   const { rows } = await pool.query(`SELECT * FROM stats WHERE user_id = $1`, [userId]);
@@ -190,7 +190,6 @@ function gameView(game, day) {
     day,
     puzzleNumber: puzzleNumber(day),
     boardCount: BOARD_COUNT,
-    maxGuesses: MAX_GUESSES,
     guesses,
     boards: boards.map((b, i) => ({
       rows: b.rows,
@@ -198,7 +197,7 @@ function gameView(game, day) {
       solvedAt: b.solvedAt,
       answer: finished ? answers[i] : undefined, // only revealed once you're done
     })),
-    status: !finished ? "playing" : game.won ? "won" : "lost",
+    status: finished ? "won" : "playing",
     hard: !!game?.hard,
     guessLimitMs: HARD_GUESS_MS,
     startedAt: game?.started_at || null,
@@ -221,8 +220,8 @@ async function saveGame(client, userId, day, game, guesses, now) {
   const boards = buildBoards(answers, guesses);
   const solved = boards.filter((b) => b.solved).length;
   const won = solved === BOARD_COUNT;
-  const lost = !won && guesses.length >= MAX_GUESSES;
-  const finishedAt = won || lost ? now : null;
+  // No guess limit: the game only ends when all 16 boards are solved.
+  const finishedAt = won ? now : null;
   const duration = finishedAt ? finishedAt - new Date(game.started_at) : null;
 
   await client.query(
@@ -252,15 +251,17 @@ async function saveGame(client, userId, day, game, guesses, now) {
   }
 }
 
-// Hard mode: every 60 seconds without a guess burns one of your 21 guesses.
+// Hard mode: every 60 seconds without a guess adds a wasted guess to your count.
 async function applyTimeouts(client, userId, day, game, now) {
   if (!game.hard || game.finished_at || !game.last_guess_at) return game;
   const waited = now - new Date(game.last_guess_at);
   let missed = Math.floor(Math.max(0, waited - GRACE_MS) / HARD_GUESS_MS);
   if (missed <= 0) return game;
-  missed = Math.min(missed, MAX_GUESSES - game.guesses.length);
+  const capped = missed > MAX_TIMEOUTS_PER_GAP; // safety cap if someone walks away for hours
+  if (capped) missed = MAX_TIMEOUTS_PER_GAP;
   const guesses = [...game.guesses, ...Array(missed).fill(TIMEOUT)];
-  game.last_guess_at = new Date(new Date(game.last_guess_at).getTime() + missed * HARD_GUESS_MS);
+  // Start the next 60 seconds where the last missed one ended (or right now, after a capped absence).
+  game.last_guess_at = capped ? now : new Date(new Date(game.last_guess_at).getTime() + missed * HARD_GUESS_MS);
   await saveGame(client, userId, day, game, guesses, now);
   const { rows } = await client.query(`SELECT * FROM games WHERE user_id = $1 AND day = $2`, [userId, day]);
   return rows[0];
@@ -357,27 +358,32 @@ app.post(
 );
 
 // ---------- Leaderboards (one per Discord server) ----------
+// Scoring: fewer guesses is better, then faster time breaks ties.
+
+const LB_LIMIT = 50;
 
 app.get(
   "/api/leaderboard",
   requireSession,
   wrap(async (req, res) => {
     const guildId = req.me.guild_id;
-    if (!guildId) return res.json({ guild: null, today: [], fastest: [], streaks: [] });
+    if (!guildId) return res.json({ guild: null, today: [], bestGuesses: [], bestTime: [], streaks: [] });
     const day = today();
 
+    // Every finished game in this server today.
     const todayQ = pool.query(
-      `SELECT u.id, u.display_name AS name, g.won, g.duration_ms, g.solved_count, g.hard,
+      `SELECT u.id, u.display_name AS name, g.duration_ms, g.hard, g.day,
               jsonb_array_length(g.guesses) AS guesses
          FROM games g
          JOIN guild_members m ON m.user_id = g.user_id AND m.guild_id = $1
          JOIN users u ON u.id = g.user_id
-        WHERE g.day = $2 AND g.finished_at IS NOT NULL
-        ORDER BY g.won DESC, g.duration_ms ASC NULLS LAST, g.solved_count DESC
-        LIMIT 50`,
+        WHERE g.day = $2 AND g.won = true
+        ORDER BY guesses ASC, g.duration_ms ASC
+        LIMIT ${LB_LIMIT}`,
       [guildId, day]
     );
-    const fastestQ = pool.query(
+    // Each player's all-time best game, ranked by guesses then time.
+    const bestGuessesQ = pool.query(
       `SELECT * FROM (
          SELECT DISTINCT ON (g.user_id) u.id, u.display_name AS name, g.duration_ms, g.day, g.hard,
                 jsonb_array_length(g.guesses) AS guesses
@@ -385,8 +391,21 @@ app.get(
            JOIN guild_members m ON m.user_id = g.user_id AND m.guild_id = $1
            JOIN users u ON u.id = g.user_id
           WHERE g.won = true
-          ORDER BY g.user_id, g.duration_ms ASC
-       ) best ORDER BY duration_ms ASC LIMIT 50`,
+          ORDER BY g.user_id, jsonb_array_length(g.guesses) ASC, g.duration_ms ASC
+       ) best ORDER BY guesses ASC, duration_ms ASC LIMIT ${LB_LIMIT}`,
+      [guildId]
+    );
+    // Each player's all-time fastest game.
+    const bestTimeQ = pool.query(
+      `SELECT * FROM (
+         SELECT DISTINCT ON (g.user_id) u.id, u.display_name AS name, g.duration_ms, g.day, g.hard,
+                jsonb_array_length(g.guesses) AS guesses
+           FROM games g
+           JOIN guild_members m ON m.user_id = g.user_id AND m.guild_id = $1
+           JOIN users u ON u.id = g.user_id
+          WHERE g.won = true
+          ORDER BY g.user_id, g.duration_ms ASC, jsonb_array_length(g.guesses) ASC
+       ) best ORDER BY duration_ms ASC, guesses ASC LIMIT ${LB_LIMIT}`,
       [guildId]
     );
     const streaksQ = pool.query(
@@ -397,17 +416,18 @@ app.get(
          JOIN users u ON u.id = s.user_id
         WHERE s.games_played > 0
         ORDER BY current_streak DESC, s.best_streak DESC, s.games_won DESC
-        LIMIT 50`,
+        LIMIT ${LB_LIMIT}`,
       [guildId, day, addDays(day, -1)]
     );
-    const [t, f, s] = await Promise.all([todayQ, fastestQ, streaksQ]);
+    const [t, bg, bt, s] = await Promise.all([todayQ, bestGuessesQ, bestTimeQ, streaksQ]);
     const num = (r) => ({ ...r, duration_ms: r.duration_ms != null ? Number(r.duration_ms) : null });
     res.json({
       guild: { id: guildId, name: req.me.guild_name },
       day,
       meId: req.me.user_id,
       today: t.rows.map(num),
-      fastest: f.rows.map(num),
+      bestGuesses: bg.rows.map(num),
+      bestTime: bt.rows.map(num),
       streaks: s.rows,
     });
   })

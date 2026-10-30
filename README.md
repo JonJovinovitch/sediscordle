@@ -1,18 +1,22 @@
 # SeDiscordle
 
-16 Wordles at once (Sedecordle rules), 21 guesses, same daily puzzle for everyone, played as a Discord Activity right inside your server.
+16 Wordles at once (Sedecordle style), no guess limit, same daily puzzle for everyone, played as a Discord Activity right inside your server.
 
 **New here? Open `SETUP-GUIDE.md`. It walks you through everything step by step.**
 
 ## What's in it
 
-- **Same rules as Sedecordle:** 16 boards, 21 guesses, and every guess goes onto every board.
-- **Hard mode:** pick it before your first guess. You get 60 seconds per guess, and if time runs out that guess is burned. Hard runs get a HARD tag on the leaderboard.
+- **Sedecordle style, no guess limit:** 16 boards, and every guess goes onto every board. Keep guessing until all 16 are solved.
+- **Scoring:** fewer guesses is better. Time breaks ties.
+- **Hard mode:** pick it before your first guess. You get 60 seconds per guess. If time runs out, a wasted guess gets added to your count. Hard runs get a HARD tag on the leaderboard.
 - **Same daily puzzle for everyone.** The new one starts at midnight (US Eastern by default).
 - **Per-server leaderboards:**
+  - **Today:** everyone who finished today's puzzle
+  - **All-Time Best:** each player's best game ever, with the date
   - **Win Streaks:** days in a row you solved all 16 (plus your best ever)
-  - **Fastest Ever:** each player's quickest full win, with the date they did it
-  - **Today:** everyone's results on today's puzzle
+  - Today and All-Time Best can be ranked **Overall** (guesses, then time), by **Fewest Guesses**, or by **Fastest**.
+- **Shuffle button:** mixes up where the 16 boards sit on screen, just for looks.
+- **Solve celebration:** each solved board pops, throws confetti, and plays an excited squeal. There's a sound on/off button.
 - **Orange and green theme:** green means right spot, orange means right letter in the wrong spot.
 - **The server does the scoring.** The answers never get sent to players until they finish, and the clock starts on your first guess and stops on the server, so times can't be faked.
 - **Fair across servers:** you get one game per day. If you're in several servers, your result counts on every one of their leaderboards.

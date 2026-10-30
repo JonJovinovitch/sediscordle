@@ -90,8 +90,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
   padding: 6px; display: flex; flex-direction: column; gap: 3px;
   transition: opacity .3s, border-color .3s;
 }
-.board.solved { border-color: color-mix(in srgb, var(--green) 55%, transparent); opacity: .55; }
-.board.failed { border-color: color-mix(in srgb, var(--red) 60%, transparent); }
+
+
 .board-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); padding: 0 2px 2px; font-weight: 600; }
 .board-check { color: var(--green); }
 .row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; }
@@ -170,7 +170,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .tab.on { color: var(--text); border-bottom-color: var(--accent); }
 .lb-list { overflow-y: auto; padding: 6px 10px; flex: 1; min-height: 120px; }
 .lb-row { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 8px; }
-.lb-row:nth-child(-n+3) .rank { color: var(--accent); }
 .lb-row.me { background: color-mix(in srgb, var(--green) 22%, transparent); }
 .rank { width: 22px; text-align: right; font-weight: 800; color: var(--muted); font-variant-numeric: tabular-nums; }
 .avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 14px; flex: none; }
@@ -212,3 +211,104 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .guess-clock { flex: none; height: 5px; background: var(--line); }
 .guess-clock span { display: block; height: 100%; background: var(--green); transition: width .1s linear; }
 .guess-clock span.low { background: var(--red); }
+
+/* ---------- header buttons ---------- */
+.actions { display: flex; align-items: center; gap: 6px; }
+.icon-btn {
+  width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--panel); font-size: 18px; display: grid; place-items: center; padding: 0;
+  transition: transform .15s, background .15s;
+}
+.icon-btn:hover { background: var(--line); }
+.icon-btn:active { transform: scale(.92); }
+.icon-btn:focus-visible, .btn:focus-visible, .key:focus-visible, .chip:focus-visible, .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- solved boards: stay proud, not faded ---------- */
+.board { position: relative; }
+.board.solved {
+  opacity: 1;
+  border-color: var(--green);
+  background: color-mix(in srgb, var(--green) 10%, var(--bg-2));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--green) 40%, transparent) inset;
+}
+.board.solved .tile.b, .board.solved .tile.y { opacity: .45; }
+.board.solved .board-check {
+  background: var(--green); color: #06140a; padding: 0 6px; border-radius: 4px; font-weight: 800;
+}
+
+/* ---------- the celebration ---------- */
+.board.celebrate {
+  z-index: 3;
+  animation: board-pop .9s cubic-bezier(.2, 1.6, .4, 1);
+  box-shadow: 0 0 0 3px var(--green), 0 0 40px 8px color-mix(in srgb, var(--green) 70%, transparent),
+    0 0 90px 20px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.board.celebrate .row:not(.input) .tile.g { animation: tile-flip .6s ease both; }
+.board.celebrate .row .tile:nth-child(2) { animation-delay: .05s; }
+.board.celebrate .row .tile:nth-child(3) { animation-delay: .1s; }
+.board.celebrate .row .tile:nth-child(4) { animation-delay: .15s; }
+.board.celebrate .row .tile:nth-child(5) { animation-delay: .2s; }
+@keyframes board-pop {
+  0% { transform: scale(1); }
+  25% { transform: scale(1.22) rotate(-2deg); }
+  50% { transform: scale(.94) rotate(1.5deg); }
+  75% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+@keyframes tile-flip {
+  0% { transform: rotateX(0); }
+  50% { transform: rotateX(90deg) scale(1.1); filter: brightness(1.6); }
+  100% { transform: rotateX(0); }
+}
+.solved-stamp {
+  position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%) rotate(-10deg);
+  background: var(--accent); color: var(--accent-ink); font-weight: 900; letter-spacing: .06em;
+  font-size: clamp(12px, 18cqi, 26px); padding: 4px 12px; border-radius: 6px; pointer-events: none;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .5); white-space: nowrap;
+  animation: stamp 1.4s ease forwards;
+}
+@keyframes stamp {
+  0% { transform: translate(-50%, -50%) rotate(-10deg) scale(2.6); opacity: 0; }
+  18% { transform: translate(-50%, -50%) rotate(-10deg) scale(.9); opacity: 1; }
+  28% { transform: translate(-50%, -50%) rotate(-10deg) scale(1.05); }
+  75% { opacity: 1; }
+  100% { transform: translate(-50%, -50%) rotate(-10deg) scale(1); opacity: 0; }
+}
+.burst { position: absolute; left: 50%; top: 45%; width: 0; height: 0; pointer-events: none; }
+.burst span {
+  position: absolute; width: 9px; height: 9px; border-radius: 2px; left: -4px; top: -4px;
+  animation: burst 1.1s cubic-bezier(.15, .7, .3, 1) both;
+}
+.burst span:nth-child(3n) { border-radius: 50%; }
+.burst span:nth-child(4n) { width: 5px; height: 13px; }
+@keyframes burst {
+  0% { transform: translate(0, 0) rotate(0) scale(.4); opacity: 1; }
+  70% { opacity: 1; }
+  100% { transform: translate(var(--x), calc(var(--y) + 60px)) rotate(var(--r)) scale(1); opacity: 0; }
+}
+
+/* ---------- hard-mode timeout rows ---------- */
+.timeout-row {
+  display: flex; align-items: center; justify-content: center;
+  aspect-ratio: 5 / 1; border-radius: 4px; font-size: max(9px, 9cqi); font-weight: 700; color: var(--muted);
+  background: repeating-linear-gradient(135deg, #1a221c 0 4px, #232e26 4px 8px);
+}
+
+/* ---------- leaderboard sort chips ---------- */
+.sorts { display: flex; gap: 6px; padding: 10px 18px 2px; flex-wrap: wrap; }
+.chip {
+  border: 1px solid var(--line); background: transparent; color: var(--muted);
+  border-radius: 999px; padding: 4px 11px; font-size: 13px; font-weight: 600;
+}
+.chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.rank.podium { color: var(--accent); }
+.lb-pair { display: flex; align-items: baseline; gap: 5px; }
+.lb-pair small { margin-right: 6px; }
+.lb-val b.dim { color: var(--muted); font-weight: 600; font-size: 14px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .board.celebrate, .board.celebrate .tile, .solved-stamp, .burst span { animation-duration: .01s !important; }
+}
+@media (max-width: 640px) {
+  .icon-btn { width: 36px; height: 36px; font-size: 16px; }
+}

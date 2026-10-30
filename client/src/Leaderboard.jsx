@@ -3,31 +3,69 @@ import { loadLeaderboard } from "./api.js";
 import { formatDay, formatTime } from "./util.js";
 
 const TABS = [
-  { id: "streaks", label: "Win Streaks" },
-  { id: "fastest", label: "Fastest Ever" },
   { id: "today", label: "Today" },
+  { id: "alltime", label: "All-Time Best" },
+  { id: "streaks", label: "Win Streaks" },
 ];
+
+const SORTS = [
+  { id: "overall", label: "Overall" },
+  { id: "guesses", label: "Fewest Guesses" },
+  { id: "time", label: "Fastest" },
+];
+
+const FOOT = {
+  overall: "Fewest guesses wins. Ties go to the faster time.",
+  guesses: "Ranked by guesses only. Same count = same rank.",
+  time: "Ranked by time only. Clock starts on your first guess.",
+  streaks: "Days in a row you solved all 16 boards.",
+};
+
+// Sorts rows and gives each a rank. Tied rows share a rank (1, 2, 2, 4...).
+function rank(rows, mode) {
+  const byGuesses = (a, b) => a.guesses - b.guesses || a.duration_ms - b.duration_ms;
+  const byTime = (a, b) => a.duration_ms - b.duration_ms || a.guesses - b.guesses;
+  const sorted = [...rows].sort(mode === "time" ? byTime : byGuesses);
+  const key =
+    mode === "guesses" ? (r) => r.guesses : mode === "time" ? (r) => r.duration_ms : (r) => `${r.guesses}|${r.duration_ms}`;
+  let last = null;
+  let lastRank = 0;
+  return sorted.map((r, i) => {
+    const k = key(r);
+    if (k !== last) {
+      lastRank = i + 1;
+      last = k;
+    }
+    return { ...r, rank: lastRank };
+  });
+}
 
 function Initial({ name }) {
   let h = 0;
   for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360;
   return (
-    <span className="avatar" style={{ background: `hsl(${h} 45% 38%)` }}>
+    <span className="avatar" style={{ background: `hsl(${h} 45% 34%)` }}>
       {name.trim()[0]?.toUpperCase() || "?"}
     </span>
   );
 }
 
 export default function Leaderboard({ onClose }) {
-  const [tab, setTab] = useState("streaks");
+  const [tab, setTab] = useState("today");
+  const [sort, setSort] = useState("overall");
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    loadLeaderboard().then(setData, () => setError("Couldn't load the leaderboard."));
+    loadLeaderboard().then(setData, () => setError("Couldn't load the leaderboard. Close it and try again."));
   }, []);
 
-  const rows = data?.[tab] || [];
+  let rows = [];
+  if (data) {
+    if (tab === "streaks") rows = data.streaks.map((r, i) => ({ ...r, rank: i + 1 }));
+    else if (tab === "today") rows = rank(data.today, sort);
+    else rows = rank(sort === "time" ? data.bestTime : data.bestGuesses, sort);
+  }
 
   return (
     <div className="overlay" onClick={onClose}>
@@ -59,6 +97,20 @@ export default function Leaderboard({ onClose }) {
                 </button>
               ))}
             </div>
+            {tab !== "streaks" && (
+              <div className="sorts">
+                {SORTS.map((s) => (
+                  <button
+                    key={s.id}
+                    className={`chip${sort === s.id ? " on" : ""}`}
+                    onClick={() => setSort(s.id)}
+                    aria-pressed={sort === s.id}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div className="lb-list">
               {error && <p className="muted pad">{error}</p>}
@@ -68,40 +120,35 @@ export default function Leaderboard({ onClose }) {
                   {tab === "today" ? "Nobody has finished today's puzzle yet." : "No wins yet. Be the first!"}
                 </p>
               )}
-              {rows.map((r, i) => (
+              {rows.map((r) => (
                 <div className={`lb-row${r.id === data.meId ? " me" : ""}`} key={r.id}>
-                  <span className="rank">{i + 1}</span>
+                  <span className={`rank${r.rank <= 3 ? " podium" : ""}`}>{r.rank}</span>
                   <Initial name={r.name} />
                   <span className="lb-name">
                     {r.name}
                     {r.hard && tab !== "streaks" && <span className="hard-tag">HARD</span>}
                   </span>
-                  {tab === "streaks" && (
+                  {tab === "streaks" ? (
                     <span className="lb-val">
-                      <b>{r.current_streak}</b> <small>day{r.current_streak === 1 ? "" : "s"}</small>
+                      <b>
+                        {r.current_streak} <small>day{r.current_streak === 1 ? "" : "s"}</small>
+                      </b>
                       <em>best {r.best_streak}</em>
                     </span>
-                  )}
-                  {tab === "fastest" && (
+                  ) : (
                     <span className="lb-val">
-                      <b>{formatTime(r.duration_ms)}</b>
-                      <em>{formatDay(r.day)}</em>
-                    </span>
-                  )}
-                  {tab === "today" && (
-                    <span className="lb-val">
-                      {r.won ? <b>{formatTime(r.duration_ms)}</b> : <b className="lost">{r.solved_count}/16</b>}
-                      <em>{r.guesses} guesses</em>
+                      <span className="lb-pair">
+                        <b className={sort === "time" ? "dim" : ""}>{r.guesses}</b>
+                        <small>guesses</small>
+                        <b className={sort === "guesses" ? "dim" : ""}>{formatTime(r.duration_ms)}</b>
+                      </span>
+                      {tab === "alltime" && <em>{formatDay(r.day)}</em>}
                     </span>
                   )}
                 </div>
               ))}
             </div>
-            <p className="lb-foot muted">
-              {tab === "streaks" && "Days in a row with all 16 boards solved."}
-              {tab === "fastest" && "Each player's quickest full win, and the day they did it."}
-              {tab === "today" && "Clock starts on your first guess. HARD = 60 seconds per guess."}
-            </p>
+            <p className="lb-foot muted">{tab === "streaks" ? FOOT.streaks : FOOT[sort]}</p>
           </>
         )}
       </div>

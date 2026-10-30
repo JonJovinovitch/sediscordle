@@ -13,7 +13,6 @@ export const ANSWERS = readList("answers.txt");
 export const ALLOWED = new Set([...readList("allowed.txt"), ...ANSWERS]);
 
 export const BOARD_COUNT = 16;
-export const MAX_GUESSES = 21;
 export const HARD_GUESS_MS = 60_000; // hard mode: 60 seconds per guess
 export const TIMEOUT = "....."; // a guess burned because the hard-mode clock ran out
 const FIRST_DAY = "2026-01-01"; // puzzle #1
