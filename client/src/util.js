@@ -11,9 +11,16 @@ export function formatTime(ms) {
     : `${mins}:${pad(secs)}.${tenths}`;
 }
 
-export function formatDay(day) {
+// "Nov 21, 2026", or just "Nov 21" when short and it's this year.
+export function formatDay(day, short = false) {
   const d = new Date(`${day}T12:00:00Z`);
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  const thisYear = d.getUTCFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(short && thisYear ? {} : { year: "numeric" }),
+    timeZone: "UTC",
+  });
 }
 
 const RANK = { g: 3, y: 2, b: 1 };

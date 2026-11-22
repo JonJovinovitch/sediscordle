@@ -40,12 +40,21 @@ function rank(rows, mode) {
   });
 }
 
+// First letter of a name, including fancy-font names like 𝕷𝖚𝖈𝖆𝖘 (those letters are 2 characters long
+// in JavaScript, so name[0] would cut one in half and show "�"). Fancy letters get turned back into plain ones.
+function initialOf(name) {
+  const first = Array.from(String(name || "").trim())[0];
+  if (!first) return "?";
+  const plain = first.normalize("NFKC");
+  return /\p{L}|\p{N}/u.test(plain) ? plain.toUpperCase() : first;
+}
+
 function Initial({ name }) {
   let h = 0;
   for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360;
   return (
     <span className="avatar" style={{ background: `hsl(${h} 45% 34%)` }}>
-      {name.trim()[0]?.toUpperCase() || "?"}
+      {initialOf(name)}
     </span>
   );
 }
@@ -124,10 +133,8 @@ export default function Leaderboard({ onClose }) {
                 <div className={`lb-row${r.id === data.meId ? " me" : ""}`} key={r.id}>
                   <span className={`rank${r.rank <= 3 ? " podium" : ""}`}>{r.rank}</span>
                   <Initial name={r.name} />
-                  <span className="lb-name">
-                    {r.name}
-                    {r.hard && tab !== "streaks" && <span className="hard-tag">HARD</span>}
-                  </span>
+                  <span className="lb-name">{r.name}</span>
+                  {r.hard && tab !== "streaks" && <span className="hard-tag">HARD</span>}
                   {tab === "streaks" ? (
                     <span className="lb-val">
                       <b>
@@ -136,13 +143,20 @@ export default function Leaderboard({ onClose }) {
                       <em>best {r.best_streak}</em>
                     </span>
                   ) : (
+                    // Two short lines instead of one long one, so it fits narrow phones:
+                    // the number being ranked on top, the other one (and the date) underneath.
                     <span className="lb-val">
-                      <span className="lb-pair">
-                        <b className={sort === "time" ? "dim" : ""}>{r.guesses}</b>
-                        <small>guesses</small>
-                        <b className={sort === "guesses" ? "dim" : ""}>{formatTime(r.duration_ms)}</b>
-                      </span>
-                      {tab === "alltime" && <em>{formatDay(r.day)}</em>}
+                      {sort === "time" ? (
+                        <b>{formatTime(r.duration_ms)}</b>
+                      ) : (
+                        <b>
+                          {r.guesses} <small>guesses</small>
+                        </b>
+                      )}
+                      <em>
+                        {sort === "time" ? `${r.guesses} guesses` : formatTime(r.duration_ms)}
+                        {tab === "alltime" && ` · ${formatDay(r.day, true)}`}
+                      </em>
                     </span>
                   )}
                 </div>
